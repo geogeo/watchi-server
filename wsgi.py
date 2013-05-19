@@ -1,16 +1,54 @@
 import bottle
 import os
-from bottle import Bottle, route, run, get, post, request
+from bottle import Bottle, route, run, get, post, request,redirect,response,view,static_file
 import json
 import urllib
 import urllib2
 import config
 from pymongo import MongoClient
 from database import db
+from pprint import pformat
+import httplib2
+from apiclient.discovery import build
 
 application = app = Bottle()
 reg_ids = set()
 
+@app.route('/static/<filepath:path>')
+def server_static(filepath):
+    return static_file(filepath, root='./static')
+
+@app.route('/google/login')
+def google_login():
+    authorize_url = config.FLOW.step1_get_authorize_url()
+
+    # url = google.redirect(request.environ)
+    redirect(authorize_url)
+
+@app.route('/oauth2callback')
+def google_callback():
+    code = request.query.get('code')
+    if not code:
+        redirect('/google/login/error')
+
+    credential = config.FLOW.step2_exchange(code)
+    http = httplib2.Http()
+    http = credential.authorize(http)
+    user_info_service = build('oauth2','v2',http=http)
+    user_info = user_info_service.userinfo().get().execute()
+    # resp, content = http.request("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", "GET")
+   
+    if user_info and user_info.get('id'):
+        print user_info,credential
+        credential_dict = json.loads(credential.to_json())
+        user_info.update({'access_token':credential_dict['access_token'],'token_hash':credential_dict['id_token']['token_hash']})
+        db.user_info.insert(user_info)
+        response.set_cookie('session_id', credential_dict['id_token']['token_hash'])
+        redirect('/')
+        
+    else:
+        return 'user auth error'
+   
 @app.post("/register")
 def register():
     global reg_ids
@@ -18,49 +56,16 @@ def register():
     return "sucess"
 
 @app.route("/")
+@view("index")
 def index():
-    global reg_ids
-    reg_id_list = list(reg_ids)
-
-    html = """
-<html>
-    <head>
-        <title>Sample GCM Server</title>
-    </head>
-    <body>
-"""
-    cltion = db.test_collection
-    if len(reg_ids) == 0:
-        html += "<h3>No registered devices</h3>"
-        html += str(cltion.find_one())
+    session_id = request.get_cookie('session_id')
+    user_info = db.user_info.find_one({"token_hash":session_id})
+    # import pdb;pdb.set_trace()
+    if user_info!=None:
+        attached_devices = db.attached_devices.find_one({"id":user_info['id']})
+        return {"attached_devices":attached_devices,"userinfo":user_info}
     else:
-        html += """<h3>Registered Ids</h3>
-        <form action="/send" method="post">
-            Message: <input name="msg" size="30" />
-            <input type="submit" value="Send" />
-            <br />
-            Devices:
-            <table>"""
-        
-
-        for reg_id in reg_id_list:
-            html += """
-                <tr>
-                    <td>
-                        <input type="checkbox" name="reg_id" value="%s" checked />%s
-                    </td>
-                </tr>
-            """ % (reg_id, reg_id)
-
-        html += """
-        </table>
-    </form>"""
-
-    html += """
-  </body>
-</html>
-"""
-    return html
+        redirect('/google/login')
 
 @app.post('/send')
 def send():
