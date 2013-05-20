@@ -6,7 +6,7 @@ import urllib
 import urllib2
 import config
 from pymongo import MongoClient
-from database import db
+from database import get_db as db
 from pprint import pformat
 import httplib2
 from apiclient.discovery import build
@@ -21,7 +21,6 @@ def server_static(filepath):
 @app.route('/google/login')
 def google_login():
     authorize_url = config.FLOW.step1_get_authorize_url()
-
     # url = google.redirect(request.environ)
     redirect(authorize_url)
 
@@ -39,10 +38,9 @@ def google_callback():
     # resp, content = http.request("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", "GET")
    
     if user_info and user_info.get('id'):
-        print user_info,credential
         credential_dict = json.loads(credential.to_json())
         user_info.update({'access_token':credential_dict['access_token'],'token_hash':credential_dict['id_token']['token_hash']})
-        db.user_info.insert(user_info)
+        db().user_info.insert(user_info)
         response.set_cookie('session_id', credential_dict['id_token']['token_hash'])
         redirect('/')
         
@@ -51,21 +49,35 @@ def google_callback():
    
 @app.post("/register")
 def register():
-    global reg_ids
-    reg_ids.add(request.forms.reg_id)
+    device_info = {request.forms.email:request.forms.reg_id}
+    if db().device_info.find_one(device_info)!=None:
+        db().device_info.insert(device_info)
     return "sucess"
 
 @app.route("/")
 @view("index")
 def index():
     session_id = request.get_cookie('session_id')
-    user_info = db.user_info.find_one({"token_hash":session_id})
-    # import pdb;pdb.set_trace()
+    # from nose.tools import set_trace;set_trace()
+    user_info = db().user_info.find_one({"token_hash":session_id})
+    
     if user_info!=None:
-        attached_devices = db.attached_devices.find_one({"id":user_info['id']})
+        attached_devices = db().attached_devices.find_one({"id":user_info['id']})
         return {"attached_devices":attached_devices,"userinfo":user_info}
     else:
         redirect('/google/login')
+
+@app.route("/user/:userid")
+def userinfo(userid):
+    session_id = request.get_cookie('session_id')
+    from nose.tools import set_trace;set_trace()
+    user_info = db().user_info.find_one({"token_hash":session_id})
+    
+    if user_info['id'] == userid:
+        return user_info
+    else:
+        return "you are not this user"
+    
 
 @app.post('/send')
 def send():
