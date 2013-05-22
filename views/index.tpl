@@ -12,7 +12,7 @@
           <ul class="nav pull-right">
             <li>
 %if userinfo:
-<a href="user/{{userinfo.get('name')}}">{{userinfo["name"]}}</a>
+<a href="user/{{userinfo.get('id')}}">{{userinfo["id"]}}</a>
 %else:
               <a   href="/google/login">Login Google</a>
 %end

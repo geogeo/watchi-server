@@ -1,20 +1,31 @@
-import wsgi
+
 from nose.tools import set_trace
-from mock import MagicMock, patch,DEFAULT
+from mock import MagicMock, patch,DEFAULT,Mock
 from bottle import HTTPResponse,request
 from pymongo.database import Database, Collection
 from mongomock import *
 
-def cut_off(*patches):    
-    def decorator(meth):        
-        def wrapper(self, *args):            
-            return meth(self, *args[:-len(patches)])        
-        for obj in patches:            
-            wrapper = patch(obj)(wrapper)        
-        return wrapper    
-    return decorator
+from mock import patch, Mock
+p = patch("bottle.view")
+p.start()
+import bottle
+bottle.view.return_value = lambda x : x
+import wsgi
 
+mock = Mock()
+views= {'wsgi':mock,'wsgi.view':mock.module}
+import wsgi
+db = Database(Connection())
+def setup():
+    global db
+    db.user_info.insert({'id':"12",'token_hash':"session"})
+    db.attached_devices.insert({'id':"12","attatched_devices":"nexus"})
 
+def tear_down():
+    global db
+    db.drop_collection("user_info")
+    db.drop_collection("attached_devicese")
+    
 def test_index_without_login():
     try:
         wsgi.index()
@@ -22,34 +33,33 @@ def test_index_without_login():
         assert e._headers['Location']==['http://127.0.0.1/google/login']
 
 @patch("wsgi.db")
-@cut_off("wsgi.view")
-def test_index_with_session(mock_db,mock_view):
-    request.get_cookie = MagicMock(return_value='1234')
-    mock_db.user_info = MagicMock(return_value='userinfo')
+@patch("wsgi.request")
+def test_index_with_session(mock_request,mock_db):
+    mock_view = lambda x:x
+    mock_request.get_cookie = MagicMock(return_value='session')
+    global db
+    mock_db.return_value = db
     mock_db.attached_devices = MagicMock(return_value="attached_devices")
-    assert wsgi.index() == {"attached_devices":"attached_devices","userinfo":"userinfo"}
+    resp = wsgi.index()
+    print resp
+    resp['attached_devices'].pop('_id')
+    resp['userinfo'].pop('_id')
+    assert resp == {'attached_devices': {'id': '12', 'attatched_devices': 'nexus'}, 'userinfo': {'token_hash': 'session', 'id': '12'}}
 
 @patch("wsgi.db")
 @patch("wsgi.request")
-@patch("wsgi.view")
-def test_access_my_own_userinfo(mock_view,mock_request,mock_db):
+def test_access_my_own_userinfo(mock_request,mock_db):
     mock_request.get_cookie = MagicMock(return_value="session")
-    db = Database(Connection())
-    db.user_info.insert({'id':"12",'token_hash':"session"})
+    global db
     mock_db.return_value = db
     resp =wsgi.userinfo("12")
-    set_trace()
     assert resp['id'] =="12"
 
-    
 @patch("wsgi.db")
 @patch("wsgi.request")
-@patch("wsgi.view")
-def test_deny_access_other_peoples_userinfo(mock_view,mock_request,mock_db):
+def test_deny_access_other_peoples_userinfo(mock_request,mock_db):
     mock_request.get_cookie = MagicMock(return_value="session")
-    db = Database(Connection())
-    db.user_info.insert({'id':"12",'token_hash':"session"})
+    global db
     mock_db.return_value = db
     resp =wsgi.userinfo("1")
     assert resp=="you are not this user"
-

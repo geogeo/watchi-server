@@ -67,10 +67,9 @@ def index():
     else:
         redirect('/google/login')
 
-@app.route("/user/:userid")
+@app.route("/user/<userid>")
 def userinfo(userid):
     session_id = request.get_cookie('session_id')
-    from nose.tools import set_trace;set_trace()
     user_info = db().user_info.find_one({"token_hash":session_id})
     
     if user_info['id'] == userid:
