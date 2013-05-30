@@ -1,4 +1,3 @@
-
 from nose.tools import set_trace
 from mock import MagicMock, patch,DEFAULT,Mock
 from bottle import HTTPResponse,request
@@ -6,26 +5,35 @@ from pymongo.database import Database, Collection
 from mongomock import *
 
 from mock import patch, Mock
-p = patch("bottle.view")
-p.start()
 import bottle
-bottle.view.return_value = lambda x : x
-import wsgi
 
-mock = Mock()
-views= {'wsgi':mock,'wsgi.view':mock.module}
-import wsgi
+# mock decorater view
+v = patch("bottle.view",return_value = lambda x : x)
+v.start()
+
+# mock import config
+import sys
+config_mock = Mock(spec=['config'])
+config_mock.__name__ = 'config'
+sys.modules['config'] = config_mock
+config_mock.LOGIN_URL = "/google/login"
+
+# mock database
 db = Database(Connection())
+patch("database.get_db",return_value = db).start()
+
 def setup():
     global db
-    db.user_info.insert({'id':"12",'token_hash':"session"})
-    db.attached_devices.insert({'id':"12","attatched_devices":"nexus"})
+    db.user_info.insert({'id':"12",'token_hash':"session","email":"oyanglulu@gmail.com"})
+    db.attached_devices.insert({'email':"oyanglulu@gmail.com","attatched_devices":"nexus"})
 
 def tear_down():
     global db
     db.drop_collection("user_info")
     db.drop_collection("attached_devicese")
-    
+
+import wsgi
+
 def test_index_without_login():
     try:
         wsgi.index()
@@ -35,31 +43,45 @@ def test_index_without_login():
 @patch("wsgi.db")
 @patch("wsgi.request")
 def test_index_with_session(mock_request,mock_db):
-    mock_view = lambda x:x
     mock_request.get_cookie = MagicMock(return_value='session')
     global db
     mock_db.return_value = db
     mock_db.attached_devices = MagicMock(return_value="attached_devices")
     resp = wsgi.index()
     print resp
-    resp['attached_devices'].pop('_id')
+    for device in resp['attached_devices']:
+        device.pop('_id')
     resp['userinfo'].pop('_id')
-    assert resp == {'attached_devices': {'id': '12', 'attatched_devices': 'nexus'}, 'userinfo': {'token_hash': 'session', 'id': '12'}}
+    assert resp =={u'attached_devices': [{u'email': u'oyanglulu@gmail.com', u'attatched_devices': u'nexus'}], u'userinfo': {u'token_hash': u'session', u'id': u'12', u'email': u'oyanglulu@gmail.com'}}
 
-@patch("wsgi.db")
 @patch("wsgi.request")
-def test_access_my_own_userinfo(mock_request,mock_db):
+def test_access_my_own_userinfo(mock_request):
     mock_request.get_cookie = MagicMock(return_value="session")
-    global db
-    mock_db.return_value = db
     resp =wsgi.userinfo("12")
-    assert resp['id'] =="12"
+    assert resp['user_info']['id'] =="12"
 
-@patch("wsgi.db")
 @patch("wsgi.request")
-def test_deny_access_other_peoples_userinfo(mock_request,mock_db):
-    mock_request.get_cookie = MagicMock(return_value="session")
-    global db
-    mock_db.return_value = db
-    resp =wsgi.userinfo("1")
-    assert resp=="you are not this user"
+def test_register_device(mock_request):
+    forms = bottle.MultiDict()
+    forms.append("email","oyanglulu@gmail.com")
+    forms.append("reg_id","whatever from google")
+    forms.append("phone_name","nexus4")
+    mock_request.forms = bottle.FormsDict(forms)
+    resp = wsgi.register()
+    assert resp == "sucess"
+
+
+# @patch("wsgi.request")
+# def test_send_msg(mock_request):
+#     forms = bottle.MultiDict()
+#     forms.append("email", "oyanglulu@gmail.com")
+#     forms.append("reg_id", "whatever from google")
+#     forms.append("phone_name", "nexus10")
+#     mock_request.forms = bottle.FormsDict(forms)
+#     resp = wsgi.register()
+#     assert resp == "success"
+
+# @patch("wsgi.request")
+# def test_send_msg(mock_request):
+
+# v.stop()

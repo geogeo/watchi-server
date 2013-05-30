@@ -1,9 +1,9 @@
 from pymongo import MongoClient
-from config import MONGO_URI
+import config
 
 _instance = None
 def get_db():
     global _instance
     if _instance is None:
-        _instance = MongoClient(MONGO_URI).watchi
+        _instance = MongoClient(config.MONGO_URI).watchi
     return _instance

@@ -6,7 +6,7 @@
           <a class="brand" href="#">Watchi</a>
           <ul class="nav pull-right">
             <li>
-%if userinfo:
+%if userinfo != None:
 <a href="user/{{userinfo.get('id')}}">{{userinfo["id"]}}</a>
 %else:
               <a   href="/google/login">Login Google</a>
@@ -19,7 +19,7 @@
 
       <h1>Your attached devices</h1>
       
-      %if attached_devices > 0:
+      %if len(attached_devices) > 0:
       <h3>Registered Ids</h3>
       <form action="/send" method="post">
         Message: <input name="msg" size="30" />
@@ -38,8 +38,7 @@
 <h3>      No Device Registed</h3>
       %end
 
-
-      <script src="http://code.jquery.com/jquery.js"></script>
+ <script src="http://code.jquery.com/jquery.js"></script>
       <script src="static/js/bootstrap.min.js"></script>
     </body>
   </html>

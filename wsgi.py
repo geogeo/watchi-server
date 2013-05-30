@@ -4,15 +4,25 @@ from bottle import Bottle, route, run, get, post, request,redirect,response,view
 import json
 import urllib
 import urllib2
+from mock import Mock
 import config
 from pymongo import MongoClient
 from database import get_db as db
 from pprint import pformat
 import httplib2
 from apiclient.discovery import build
-
+from bson.json_util import dumps
 application = app = Bottle()
 reg_ids = set()
+
+def login_require(fn):
+    def check_session(**kwargs):
+        session_id = request.get_cookie('session_id')
+        if session_id and db().user_info.find_one({"token_hash":session_id})!=None:
+            return fn(userid=db().user_info.find_one({"token_hash":session_id})['id'],**kwargs)
+        else:
+            redirect("/google/login")
+    return check_session
 
 @app.route('/static/<filepath:path>')
 def server_static(filepath):
@@ -36,61 +46,54 @@ def google_callback():
     user_info_service = build('oauth2','v2',http=http)
     user_info = user_info_service.userinfo().get().execute()
     # resp, content = http.request("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", "GET")
-   
+
     if user_info and user_info.get('id'):
         credential_dict = json.loads(credential.to_json())
         user_info.update({'access_token':credential_dict['access_token'],'token_hash':credential_dict['id_token']['token_hash']})
         db().user_info.insert(user_info)
         response.set_cookie('session_id', credential_dict['id_token']['token_hash'])
         redirect('/')
-        
+
     else:
         return 'user auth error'
-   
-@app.post("/register")
-def register():
-    device_info = {request.forms.email:request.forms.reg_id}
-    if db().device_info.find_one(device_info)!=None:
-        db().device_info.insert(device_info)
-    return "sucess"
 
 @app.route("/")
 @view("index")
 def index():
     session_id = request.get_cookie('session_id')
     # from nose.tools import set_trace;set_trace()
-    user_info = db().user_info.find_one({"token_hash":session_id})
+    if session_id == None:
+        redirect(config.LOGIN_URL)
     
+    user_info = db().user_info.find_one({"token_hash":session_id})
+    attached_devices = []
     if user_info!=None:
-        attached_devices = db().attached_devices.find_one({"id":user_info['id']})
-        return {"attached_devices":attached_devices,"userinfo":user_info}
+        attached_devices = db().attached_devices.find({"email":user_info['email']})
+        return  json.loads(dumps({"attached_devices":attached_devices,"userinfo":user_info}))
     else:
-        redirect('/google/login')
+        redirect(config.LOGIN_URL)
 
 @app.route("/user/<userid>")
+@view("user")
 def userinfo(userid):
     session_id = request.get_cookie('session_id')
     user_info = db().user_info.find_one({"token_hash":session_id})
-    
-    if user_info['id'] == userid:
-        return user_info
-    else:
-        return "you are not this user"
-    
+    # from nose.tools import set_trace;set_trace()
+    if user_info == None or user_info['id'] != userid:
+        redirect(config.LOGIN_URL)
+    attached_devices = db().attached_devices.find({"email":user_info['email']})
+    return json.loads(dumps({"user_info":user_info,"attached_devices":attached_devices}))
+
+@app.post("/register")
+def register():
+    device_info = {"reg_id":request.forms.reg_id,"email":request.forms.email,}
+    if db().device_info.find_one(device_info)!=None:
+        db().device_info.insert(device_info)
+    return "sucess"
+
 
 @app.post('/send')
 def send():
-    """
-      Sends a message to the devices.
-      The message is specified by the 'msg' parameter.
-      The devices are specified by the 'reg_id' parameter. If the request does
-      not contain any registration ids, the message will be sent to all
-      devices recorded by /register
-
-      Sample request:
-      curl -d "reg_id=test_id&msg=Hello" http://localhost:8080/sen
-    """
-    global reg_ids
     params = request.forms
     msg =  params.msg
     reg_id_list = []
