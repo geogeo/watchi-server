@@ -70,18 +70,12 @@ def test_register_device(mock_request):
     resp = wsgi.register()
     assert resp == "sucess"
 
-
-# @patch("wsgi.request")
-# def test_send_msg(mock_request):
-#     forms = bottle.MultiDict()
-#     forms.append("email", "oyanglulu@gmail.com")
-#     forms.append("reg_id", "whatever from google")
-#     forms.append("phone_name", "nexus10")
-#     mock_request.forms = bottle.FormsDict(forms)
-#     resp = wsgi.register()
-#     assert resp == "success"
-
-# @patch("wsgi.request")
-# def test_send_msg(mock_request):
-
-# v.stop()
+@patch("wsgi.request")
+def test_register_chrome(mock_request):
+    forms = bottle.MultiDict()
+    forms.append("email","email")
+    forms.append("channelId","whatever from google")
+    mock_request.forms = bottle.FormsDict(forms)
+    resp = wsgi.register_chrome()
+    assert resp == "sucess"
+    assert db.chrome_info.find_one({'email':'email'})['channelId'] =='whatever from google'

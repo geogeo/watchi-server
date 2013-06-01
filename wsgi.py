@@ -50,7 +50,10 @@ def google_callback():
     if user_info and user_info.get('id'):
         credential_dict = json.loads(credential.to_json())
         user_info.update({'access_token':credential_dict['access_token'],'token_hash':credential_dict['id_token']['token_hash']})
-        db().user_info.insert(user_info)
+        if db().user_info.find_one({'id':user_info.get('id')}) != None:
+            db().user_info.insert(user_info)
+        else:
+            db().user_info.update({'id':user_info.get('id')},user_info)
         response.set_cookie('session_id', credential_dict['id_token']['token_hash'])
         redirect('/')
 
@@ -61,10 +64,10 @@ def google_callback():
 @view("index")
 def index():
     session_id = request.get_cookie('session_id')
-    # from nose.tools import set_trace;set_trace()
+
     if session_id == None:
         redirect(config.LOGIN_URL)
-    
+
     user_info = db().user_info.find_one({"token_hash":session_id})
     attached_devices = []
     if user_info!=None:
@@ -87,10 +90,45 @@ def userinfo(userid):
 @app.post("/register")
 def register():
     device_info = {"reg_id":request.forms.reg_id,"email":request.forms.email,}
+
     if db().device_info.find_one(device_info)!=None:
         db().device_info.insert(device_info)
     return "sucess"
 
+@app.post('/register_chrome')
+def register_chrome():
+    chrome_info = {"channelId":request.forms.channelId,"email":request.forms.email}
+    # from nose.tools import set_trace;set_trace()
+    if db().chrome_info.find_one(chrome_info)== None:
+        db().chrome_info.insert(chrome_info)
+    return "sucess"
+
+# if registed chrome gms, notify chrome
+@app.post('/receive')
+def receive():
+    msg = request.forms.msg
+
+@app.get('/sendtochrome')
+def send_to_chrome():
+    accesstoken = db().user_info.find_one({'email':'oyanglulu@gmail.com'})['access_token']
+
+    data = {
+    'channelId' :db().chrome_info.find_one({'email':"oyanglulu@gmail.com"})['channelId'],
+    'subchannelId': '1',
+    'payload': 'Thanks for installing my app!'
+    }
+
+    headers = {
+      'Content-Type' : 'application/json',
+      'Authorization' : 'Bearer ' + accesstoken
+    }
+    gcm_req = urllib2.Request(config.CHROME_PUSH_URL, json.dumps(data), headers)
+
+    try:
+      gcm_resp = urllib2.urlopen(gcm_req)
+      return 'success'
+    except urllib2.HTTPError, e:
+      return "error",e.read(), accesstoken
 
 @app.post('/send')
 def send():

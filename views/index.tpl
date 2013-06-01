@@ -18,7 +18,7 @@
       </div>
 
       <h1>Your attached devices</h1>
-      
+      <a class=button href="#">send test msg</a>
       %if len(attached_devices) > 0:
       <h3>Registered Ids</h3>
       <form action="/send" method="post">
