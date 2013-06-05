@@ -75,6 +75,7 @@ def test_register_chrome(mock_request):
     forms = bottle.MultiDict()
     forms.append("email","email")
     forms.append("channelId","whatever from google")
+    forms.append("auth_token","an token")
     mock_request.forms = bottle.FormsDict(forms)
     resp = wsgi.register_chrome()
     assert resp == "sucess"

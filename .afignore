@@ -1,5 +1,8 @@
 *.py[cod]
 
+local_client_secrets.json
+local_config.py
+
 dev/
 
 # C extensions

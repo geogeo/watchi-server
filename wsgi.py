@@ -50,7 +50,7 @@ def google_callback():
     if user_info and user_info.get('id'):
         credential_dict = json.loads(credential.to_json())
         user_info.update({'access_token':credential_dict['access_token'],'token_hash':credential_dict['id_token']['token_hash']})
-        if db().user_info.find_one({'id':user_info.get('id')}) != None:
+        if db().user_info.find_one({'id':user_info.get('id')}) == None:
             db().user_info.insert(user_info)
         else:
             db().user_info.update({'id':user_info.get('id')},user_info)
@@ -97,10 +97,12 @@ def register():
 
 @app.post('/register_chrome')
 def register_chrome():
-    chrome_info = {"channelId":request.forms.channelId,"email":request.forms.email}
-    # from nose.tools import set_trace;set_trace()
-    if db().chrome_info.find_one(chrome_info)== None:
+    chrome_info = {"channelId":request.forms.channelId,"email":request.forms.email,"token":request.forms.token}
+
+    if db().chrome_info.find_one({'email':request.forms.email})== None:
         db().chrome_info.insert(chrome_info)
+    else:
+        db().chrome_info.update({'email':request.forms.email},chrome_info)
     return "sucess"
 
 # if registed chrome gms, notify chrome
@@ -110,10 +112,11 @@ def receive():
 
 @app.get('/sendtochrome')
 def send_to_chrome():
-    accesstoken = db().user_info.find_one({'email':'oyanglulu@gmail.com'})['access_token']
-
+    # from nose.tools import set_trace;set_trace()
+    chrome_info = db().chrome_info.find_one({'email':'oyanglulu@gmail.com'})
+    accesstoken = chrome_info['token']
     data = {
-    'channelId' :db().chrome_info.find_one({'email':"oyanglulu@gmail.com"})['channelId'],
+    'channelId' :chrome_info['channelId'],
     'subchannelId': '1',
     'payload': 'Thanks for installing my app!'
     }
